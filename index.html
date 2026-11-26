@@ -174,7 +174,7 @@ function makePlayer(team,idx){
   const hu=team===0;
   const p={team,idx,gk:idx===0,hx:HOME[idx][0],hf:HOME[idx][1],x:0,z:0,vx:0,vz:0,fx:0,fz:T.dir,dx:0,dz:0,
     run:hu?8.3:7.7,drib:hu?7.9:7.1,dive:hu?10.5:9.2,stun:0,kickCd:0,protect:0,slide:0,slideCd:0,sdx:0,sdz:0,down:0,
-    phase:rnd(6),think:rnd(.2),hold:0,g,inner,fl,fr};
+    phase:rnd(6),think:rnd(.2),hold:0,w1:rnd(6.3),w2:rnd(6.3),supT:0,supOn:false,sx:0,sz:0,slideHit:false,g,inner,fl,fr};
   T.players.push(p);players.push(p);
 }
 for(let t=0;t<2;t++)for(let i=0;i<6;i++)makePlayer(t,i);
@@ -330,7 +330,9 @@ function analyze(pts){
   const th0=Math.atan2(sy,sx);let prev=th0,a=0,mx=0;const d=[];
   for(let i=0;i<hd.length;i++){let dd=hd[i]-prev;while(dd>PI)dd-=2*PI;while(dd<-PI)dd+=2*PI;a+=dd;prev=hd[i];d.push(a);}
   for(let i=1;i<d.length-1;i++)d[i]=(d[i-1]+d[i]*2+d[i+1])/4;
-  d[0]=0;for(let i=0;i<d.length;i++){d[i]=clamp(d[i],-2.6,2.6);mx=Math.max(mx,Math.abs(d[i]));}
+  d[0]=0;for(let i=0;i<d.length;i++)mx=Math.max(mx,Math.abs(d[i]));
+  const MAXBEND=PI/6;/* aftertouch cap: 30 degrees, shape of the stroke preserved */
+  if(mx>MAXBEND){const k=MAXBEND/mx;for(let i=0;i<d.length;i++)d[i]*=k;}
   const H=Math.min(innerWidth,innerHeight);
   return{tap:false,th0,dx:Math.cos(th0),dz:Math.sin(th0),p:clamp((len-16)/(0.55*H),0,1),d:mx>0.17?d:null};
 }
@@ -363,8 +365,9 @@ function botShoot(p){
   kick(p,dx,dz,rnd(25,31),rnd(1.5,6),after);
   ball.shot={team:1,curved:!!after,dist:d,volley:false};
 }
-function startSlide(p,dx,dz){if(p.slideCd>0||p.down>0||p.slide>0)return;const m=hyp(dx,dz)||1;
-  p.slide=0.32;p.slideCd=1.0;p.sdx=dx/m;p.sdz=dz/m;p.fx=p.sdx;p.fz=p.sdz;sfx.tackle();puff(p.x,0.2,p.z,0xcfe8d6,5,3);}
+const SLIDE_T=0.44;
+function startSlide(p,dx,dz){p.slideHit=false;if(p.slideCd>0||p.down>0||p.slide>0)return;const m=hyp(dx,dz)||1;
+  p.slide=SLIDE_T;p.slideCd=1.5;p.sdx=dx/m;p.sdz=dz/m;p.fx=p.sdx;p.fz=p.sdz;sfx.tackle();puff(p.x,0.2,p.z,0xcfe8d6,5,3);}
 
 function doGesture(pts){
   if(state!=='play'||!active)return;
@@ -441,12 +444,41 @@ function think(p,dt){
   const oppOwner=b.owner&&b.owner.team!==p.team&&!(b.owner.gk&&inBox(b.owner.x,b.owner.z,b.owner.team))?b.owner:null;
   if(p===T.chaser){
     if(b.owner){go(p,b.x+b.owner.vx*0.15,b.z+b.owner.vz*0.15,p.run,0.3);
-      if(p.team===1&&oppOwner&&hyp(p.x-b.x,p.z-b.z)<2.6&&p.slideCd<=0&&Math.random()<dt*0.9){startSlide(p,b.x+b.owner.vx*0.2-p.x,b.z+b.owner.vz*0.2-p.z);p.slideCd=2.2;}}
+      if(p.team===1&&oppOwner&&hyp(p.x-b.x,p.z-b.z)<3.6&&p.slideCd<=0&&Math.random()<dt*0.8){startSlide(p,b.x+b.owner.vx*0.25-p.x,b.z+b.owner.vz*0.25-p.z);p.slideCd=2.6;}}
     else{interceptPoint(p,_t);go(p,_t.x,_t.z,p.run,0.4);}
     return;
   }
   if(oppOwner&&hyp(p.x-b.x,p.z-b.z)<(p.team===1?5:3.5)){go(p,b.x,b.z,p.run,0.3);return;}
-  formTarget(p,_t);go(p,_t.x,_t.z,p.run*0.92,2);
+  formTarget(p,_t);
+  const att=b.owner?b.owner.team===p.team:(b.lastKicker&&b.lastKicker.team===p.team);
+  if(att){
+    // attacking: look for open space with a clear passing lane from the ball
+    p.supT-=dt;
+    if(!p.supOn||p.supT<=0){if(!p.supOn){p.sx=_t.x;p.sz=_t.z;p.supOn=true;}p.supT=rnd(0.3,0.55);pickSupport(p,_t);}
+    go(p,p.sx,p.sz,p.run,1.2);
+  }else{
+    // defending: hold shape, but drift a little so lines don't sit on top of each other
+    p.supOn=false;
+    const wx=Math.sin(time*0.5+p.w1)*2.4,wz=Math.cos(time*0.37+p.w2)*1.9;
+    go(p,clamp(_t.x+wx,-HW+1,HW-1),clamp(_t.z+wz,-HL+1.5,HL-1.5),p.run*0.92,2);
+  }
+}
+function supportScore(p,x,z,ft){
+  const b=ball,T=teams[p.team];
+  let open=8;for(const o of teams[1-p.team].players)open=Math.min(open,hyp(o.x-x,o.z-z));
+  let s=open*1.1;
+  if(laneBlocked(b.x,b.z,x,z,p.team))s-=4.5;
+  const db=hyp(b.x-x,b.z-z);if(db<7)s-=(7-db)*1.2;else if(db>24)s-=(db-24)*0.5;
+  for(const m of T.players){if(m===p||m.gk)continue;const mx=m.supOn?m.sx:m.x,mz=m.supOn?m.sz:m.z,d=hyp(mx-x,mz-z);if(d<8)s-=(8-d)*0.7;}
+  s+=T.dir*(z-ft.z)*0.1-hyp(x-ft.x,z-ft.z)*0.22;
+  return s;
+}
+function pickSupport(p,ft){
+  let bx=p.sx,bz=p.sz,bs=supportScore(p,bx,bz,ft)+0.8;
+  for(let i=0;i<10;i++){const a=rnd(PI*2),r=rnd(2,9);
+    const x=clamp(ft.x+Math.cos(a)*r,-HW+1.5,HW-1.5),z=clamp(ft.z+Math.sin(a)*r*0.85,-HL+2,HL-2);
+    const s=supportScore(p,x,z,ft);if(s>bs){bs=s;bx=x;bz=z;}}
+  p.sx=bx;p.sz=bz;
 }
 function pickBest(team,cur){
   let best=null,bt=1e9;
@@ -531,7 +563,7 @@ function interactions(dt){
     for(const p of players){
       if(p.down>0||p.stun>0||(p===b.lastKicker&&b.lock>0))continue;
       const d=hyp(p.x-b.x,p.z-b.z);
-      if(p.slide>0){if(d<1.3&&b.y<1.2){b.vx=p.sdx*15;b.vz=p.sdz*15;b.vy=2;b.lastKicker=p;b.lock=0.3;b.after=null;b.shot=null;sfx.kick(0.4);}continue;}
+      if(p.slide>0){if(d<1.9&&b.y<1.2){p.slideHit=true;b.vx=p.sdx*15;b.vz=p.sdz*15;b.vy=2;b.lastKicker=p;b.lock=0.3;b.after=null;b.shot=null;sfx.kick(0.4);}continue;}
       const box=p.gk&&inBox(p.x,p.z,p.team);
       if(d<(box?1.45:1.12)&&b.y<(box?2.8:1.35)&&d<bd){bd=d;best=p;bbox=box;}
     }
@@ -541,7 +573,7 @@ function interactions(dt){
     if(o.protect<=0&&!(o.gk&&inBox(o.x,o.z,o.team))){
       for(const p of teams[1-o.team].players){
         if(p.down>0||p.stun>0)continue;const d=hyp(p.x-b.x,p.z-b.z);
-        if(p.slide>0){if(d<1.35){o.stun=0.7;b.owner=null;b.vx=p.sdx*12+rnd(-2,2);b.vz=p.sdz*12+rnd(-2,2);b.vy=1.5;b.lastKicker=p;b.lock=0.25;
+        if(p.slide>0){if(d<1.95){p.slideHit=true;o.stun=0.7;b.owner=null;b.vx=p.sdx*12+rnd(-2,2);b.vz=p.sdz*12+rnd(-2,2);b.vy=1.5;b.lastKicker=p;b.lock=0.25;
           puff(b.x,0.3,b.z,0xffffff,6,4);sfx.thud();if(p.team===0)toast('TACKLE!');break;}}
         else if(d<0.95&&Math.random()<dt*7){o.stun=0.45;sfx.tackle();setOwner(p);p.protect=0.6;break;}
       }
@@ -555,7 +587,7 @@ function step(dt){
   updateRoles(dt);
   for(const p of players)think(p,dt);
   for(const p of players){
-    if(p.slide>0){p.slide-=dt;const sp=13*(0.45+0.55*Math.max(p.slide,0)/0.32);p.vx=p.sdx*sp;p.vz=p.sdz*sp;if(p.slide<=0)p.down=0.42;}
+    if(p.slide>0){p.slide-=dt;const sp=15.5*(0.45+0.55*Math.max(p.slide,0)/SLIDE_T);p.vx=p.sdx*sp;p.vz=p.sdz*sp;if(p.slide<=0)p.down=p.slideHit?0.3:0.8;}
     else if(p.down>0){p.down-=dt;p.vx*=0.85;p.vz*=0.85;}
     else{const m=p.stun>0?0.3:1,k=Math.min(1,dt*11);p.vx+=(p.dx*m-p.vx)*k;p.vz+=(p.dz*m-p.vz)*k;}
     p.x=clamp(p.x+p.vx*dt,-HW+0.4,HW-0.4);p.z=clamp(p.z+p.vz*dt,-HL+0.4,HL-0.4);
