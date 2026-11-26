@@ -1,5 +1,5 @@
 {
-  "name": "Six-a-Side", "short_name": "Six-a-Side",
+  "name": "Five-a-Side", "short_name": "Five-a-Side",
   "start_url": "./index.html", "scope": "./",
   "display": "fullscreen", "orientation": "landscape",
   "background_color": "#0d3527", "theme_color": "#0d3527",

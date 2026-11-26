@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<title>Six-a-Side</title>
+<title>Five-a-Side</title>
 <style>
 html,body{height:100%;margin:0;background:#0d3527;overflow:hidden;touch-action:manipulation;overscroll-behavior:none;
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
@@ -64,7 +64,7 @@ canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
 <div id="banner"><span class="slab"><span class="main" id="bmain">GOAL!</span></span><span class="sub" id="bsub"></span></div>
 <div id="toast"></div>
 <div id="menu">
-  <h1 id="mtitle">SIX<em>·</em>A<em>·</em>SIDE</h1>
+  <h1 id="mtitle">FIVE<em>·</em>A<em>·</em>SIDE</h1>
   <h2 id="msub">NO THROW-INS. NO FOULS. JUST FOOTBALL.</h2>
   <div id="how">
     <span><b>LEFT THUMB</b>MOVE</span>
@@ -151,8 +151,9 @@ function canvasTex(w,h,draw){const c=document.createElement('canvas');c.width=w;
 
 /* ---------- entities ---------- */
 const teams=[{dir:-1,players:[],score:0,chaser:null},{dir:1,players:[],score:0,chaser:null}];
-const HOME=[[0,-0.94],[-0.5,-0.5],[0.5,-0.5],[0,-0.1],[-0.45,0.38],[0.45,0.38]];
-const MAXF=[0,0.25,0.25,0.7,0.9,0.9];
+const NP=5;/* players per team: keeper, defender, two wide midfielders, striker */
+const HOME=[[0,-0.94],[0,-0.52],[-0.55,-0.05],[0.55,-0.05],[0,0.42]];
+const MAXF=[0,0.3,0.8,0.8,0.9];
 const players=[];
 const G={torso:new THREE.CylinderGeometry(0.4,0.5,1.0,14),sh:new THREE.SphereGeometry(0.42,14,10),
   shorts:new THREE.CylinderGeometry(0.5,0.44,0.4,14),head:new THREE.SphereGeometry(0.3,14,10),
@@ -177,7 +178,7 @@ function makePlayer(team,idx){
     phase:rnd(6),think:rnd(.2),hold:0,w1:rnd(6.3),w2:rnd(6.3),supT:0,supOn:false,sx:0,sz:0,slideHit:false,g,inner,fl,fr};
   T.players.push(p);players.push(p);
 }
-for(let t=0;t<2;t++)for(let i=0;i<6;i++)makePlayer(t,i);
+for(let t=0;t<2;t++)for(let i=0;i<NP;i++)makePlayer(t,i);
 
 const ball={x:0,y:BR,z:0,vx:0,vy:0,vz:0,owner:null,lastKicker:null,lock:0,after:null,shot:null};
 ball.mesh=new THREE.Mesh(new THREE.SphereGeometry(BR,20,14),new THREE.MeshLambertMaterial({map:canvasTex(128,64,(g)=>{
@@ -268,9 +269,9 @@ function resetKickoff(k){
   for(const T of teams){const mine=T===teams[k];
     for(const p of T.players){const f=Math.min(p.hf,mine?-0.07:-0.22);
       p.x=p.hx*HW*0.8;p.z=T.dir*f*HL;p.vx=p.vz=p.dx=p.dz=0;p.fx=0;p.fz=T.dir;p.stun=p.slide=p.down=p.kickCd=p.hold=0;p.protect=0;}}
-  const kp=teams[k].players[3];kp.x=0;kp.z=-teams[k].dir*1.05;
+  const kp=teams[k].players[NP-1];kp.x=0;kp.z=-teams[k].dir*1.05;
   Object.assign(ball,{x:0,y:BR,z:0,vx:0,vy:0,vz:0,owner:kp,lastKicker:kp,lock:0,after:null,shot:null});
-  kp.protect=1.2;forced=null;pending=null;active=k===0?kp:teams[0].players[3];
+  kp.protect=1.2;forced=null;pending=null;active=k===0?kp:teams[0].players[NP-1];
 }
 function startMatch(){
   teams[0].score=teams[1].score=0;matchT=MATCH;$('s0').textContent=$('s1').textContent='0';
@@ -636,7 +637,7 @@ addEventListener('contextmenu',e=>e.preventDefault());
 $('menu').addEventListener('pointerup',()=>{
   if(state==='over'&&performance.now()-overAt<1200)return;
   initAudio();
-  $('mtitle').innerHTML='SIX<em>·</em>A<em>·</em>SIDE';startMatch();
+  $('mtitle').innerHTML='FIVE<em>·</em>A<em>·</em>SIDE';startMatch();
 });
 
 /* ---------- camera / resize ---------- */
