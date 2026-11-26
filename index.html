@@ -207,17 +207,13 @@ function initAudio(){
   try{
     AC=new (window.AudioContext||window.webkitAudioContext)();
     master=AC.createGain();master.gain.value=0.85;master.connect(AC.destination);
-    const len=AC.sampleRate*3;const buf=AC.createBuffer(1,len,AC.sampleRate),d=buf.getChannelData(0);let l=0;
-    for(let i=0;i<len;i++){l=(l+0.02*(Math.random()*2-1))/1.02;d[i]=l*3.5;}
-    for(let i=0;i<2000;i++){const k=i/2000;d[len-2000+i]=d[len-2000+i]*(1-k)+d[i]*k;}
-    const src=AC.createBufferSource();src.buffer=buf;src.loop=true;
-    const bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=650;bp.Q.value=0.5;
-    crowdG=AC.createGain();crowdG.gain.value=0.06;src.connect(bp);bp.connect(crowdG);crowdG.connect(master);src.start();
     noiseBuf=AC.createBuffer(1,AC.sampleRate*0.3,AC.sampleRate);const nd=noiseBuf.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
   }catch(e){AC=null;}
 }
-function crowd(level,dur=2.5){if(!AC)return;const t=AC.currentTime,g=crowdG.gain;g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);
-  g.linearRampToValueAtTime(level,t+0.15);g.linearRampToValueAtTime(0.06,t+dur);}
+function crowd(){/* background crowd removed: only one-shot effects remain */}
+// never make sound while the page is hidden or in the background
+document.addEventListener('visibilitychange',()=>{if(!AC)return;if(document.hidden)AC.suspend();else AC.resume();});
+addEventListener('pagehide',()=>{if(AC)AC.suspend();});
 function tone(type,f0,f1,dur,vol,delay=0){if(!AC)return;const t=AC.currentTime+delay,o=AC.createOscillator(),g=AC.createGain();o.type=type;
   o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);
   g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+0.02);}
